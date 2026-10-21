@@ -1,3 +1,4 @@
+import java.io.IOException;
 import java.util.InputMismatchException;
 import java.util.Scanner;
 
@@ -12,80 +13,91 @@ public class Main {
         System.out.print("Enter your username: ");
         String username = scanner.nextLine().trim();
 
-        PlayerData player = SaveManager.loadPlayer(username);
+        PlayerData player = null;
+        try {
+            player = SaveManager.loadPlayer(username);
+        } catch (Exception e) {
+            System.out.println("An error occurred while loading player data: " + e.getMessage());
+            return;
+        }
 
         int currentLevel = 1;
         int levelOneWins = 0;
         boolean playing = true;
 
         while (playing) {
-            // Efficiently configure rules based on current level
-            SlotMachine slotMachine = getSlotMachineForLevel(currentLevel, player);
-            int maxBetAllowed = getMaxBetForLevel(currentLevel, player);
+            try {
 
-            printHeader(player, currentLevel, levelOneWins);
+                SlotMachine slotMachine = getSlotMachineForLevel(currentLevel, player);
+                int maxBetAllowed = getMaxBetForLevel(currentLevel, player);
 
-            if (player.getBalance() <= 0) {
-                System.out.println("You are out of money! Game Over.");
-                break;
-            }
+                printHeader(player, currentLevel, levelOneWins);
 
-            int effectiveMax = Math.min(player.getBalance(), maxBetAllowed);
-            System.out.print("Enter bet amount (Max allowed for this level: $" + effectiveMax + "): $");
-
-            int bet = getValidBet(scanner, effectiveMax);
-            if (bet == -1) continue; // Invalid input, restart loop iteration
-
-            // Deduct bet and play
-            player.setBalance(player.getBalance() - bet);
-            System.out.println("\nSpinning the reels...");
-            SlotSymbol[] row = slotMachine.spinRow();
-            slotMachine.printRow(row);
-
-            int payout = slotMachine.calculatePayout(row, bet);
-            if (payout > 0) {
-                System.out.println("🎉 YOU WIN! You won $" + payout + "! 🎉");
-                player.setBalance(player.getBalance() + payout);
-
-                // Level progression logic
-                if (currentLevel == 1) {
-                    levelOneWins++;
-                    if (levelOneWins >= 3) {
-                        currentLevel = 2;
-                        System.out.println("\n🚀 CONGRATULATIONS! You unlocked LEVEL 2! Higher bets are now available.");
-                    }
-                } else if (currentLevel == 2 && player.getBalance() >= 150) {
-                    currentLevel = 3;
-                    System.out.println("\n🌟 AMAZING! You unlocked LEVEL 3! Epic symbols (Diamonds & Crowns) are now in play!");
+                if (player.getBalance() <= 0) {
+                    System.out.println("You are out of money! Game Over.");
+                    break;
                 }
-            } else {
-                System.out.println("❌ No match. Better luck next time!");
-            }
 
-            player.incrementGames();
+                int effectiveMax = Math.min(player.getBalance(), maxBetAllowed);
+                System.out.print("Enter bet amount (Max allowed for this level: $" + effectiveMax + "): $");
 
-            // Play again prompt
-            if (!shouldPlayAgain(scanner)) {
-                System.out.println("Thanks for playing!");
-                playing = false;
+                int bet = getValidBet(scanner, effectiveMax);
+                if (bet == -1) continue;
+
+
+                player.setBalance(player.getBalance() - bet);
+                System.out.println("\nSpinning the reels...");
+                SlotSymbol[] row = slotMachine.spinRow();
+                slotMachine.printRow(row);
+
+                int payout = slotMachine.calculatePayout(row, bet);
+                if (payout > 0) {
+                    System.out.println("🎉 YOU WIN! You won $" + payout + "! 🎉");
+                    player.setBalance(player.getBalance() + payout);
+
+
+                    if (currentLevel == 1) {
+                        levelOneWins++;
+                        if (levelOneWins >= 3) {
+                            currentLevel = 2;
+                            System.out.println("\n🚀 CONGRATULATIONS! You unlocked LEVEL 2! Higher bets are now available.");
+                        }
+                    } else if (currentLevel == 2 && player.getBalance() >= 150) {
+                        currentLevel = 3;
+                        System.out.println("\n🌟 AMAZING! You unlocked LEVEL 3! Epic symbols (Diamonds & Crowns) are now in play!");
+                    }
+                } else {
+                    System.out.println("❌ No match. Better luck next time!");
+                }
+
+                player.incrementGames();
+
+
+                if (!shouldPlayAgain(scanner)) {
+                    System.out.println("Thanks for playing!");
+                    playing = false;
+                }
+            } catch (ArithmeticException e) {
+                System.out.println("Mathematical error encountered during gameplay: " + e.getMessage());
             }
         }
-
-        SaveManager.savePlayer(player);
+        try {
+            SaveManager.savePlayer(player);
+        } catch (Exception e) {
+            System.out.println("Error saving game data: " + e.getMessage());
+        }
         scanner.close();
     }
-
     private static SlotMachine getSlotMachineForLevel(int level, PlayerData player) {
         if (level == 3) {
             return new ClassicSlotMachine(AdvancedSymbol.values());
         }
         return new ClassicSlotMachine(StandardSymbol.values());
     }
-
     private static int getMaxBetForLevel(int level, PlayerData player) {
         if (level == 1) return 10;
         if (level == 2) return 75;
-        return player.getBalance(); // Level 3: Unrestricted
+        return player.getBalance();
     }
 
     private static void printHeader(PlayerData player, int level, int levelOneWins) {
@@ -111,13 +123,17 @@ public class Main {
             return bet;
         } catch (InputMismatchException e) {
             System.out.println("Invalid input! Please enter a valid number.");
-            scanner.nextLine(); // Clear bad input
+            scanner.nextLine();
+            return -1;
+        } catch (ArithmeticException e) {
+            System.out.println("Arithmetic overflow/error detected in bet input.");
+            scanner.nextLine();
             return -1;
         }
     }
 
     private static boolean shouldPlayAgain(Scanner scanner) {
-        scanner.nextLine(); // Consume remaining newline
+        scanner.nextLine();
         while (true) {
             System.out.print("\nDo you want to play again? (Y/N): ");
             String choice = scanner.nextLine().trim().toUpperCase();
